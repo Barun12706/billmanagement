@@ -175,7 +175,7 @@ const BillPreview = forwardRef(({ invoiceData, totals }, ref) => {
                  <span>IFSC : HDFC0005320</span>
                </div>
              </div>
-             <div className="text-center font-bold mb-2 mr-8">
+             <div className="text-center font-bold mt-10 mr-8">
                Authorised signatory
              </div>
           </div>
