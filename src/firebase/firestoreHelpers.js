@@ -22,6 +22,27 @@ export const deleteMedicine = async (id) => {
   return await deleteDoc(medRef);
 };
 
+// --- Batches (sub-collection of medicines) ---
+export const getBatches = async (medicineId) => {
+  const q = query(collection(db, 'medicines', medicineId, 'batches'), orderBy('batchNo'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+export const addBatch = async (medicineId, batchData) => {
+  return await addDoc(collection(db, 'medicines', medicineId, 'batches'), batchData);
+};
+
+export const updateBatch = async (medicineId, batchId, batchData) => {
+  const batchRef = doc(db, 'medicines', medicineId, 'batches', batchId);
+  return await updateDoc(batchRef, batchData);
+};
+
+export const deleteBatch = async (medicineId, batchId) => {
+  const batchRef = doc(db, 'medicines', medicineId, 'batches', batchId);
+  return await deleteDoc(batchRef);
+};
+
 // Seed initial medicines
 const initialMedicines = [
   { productName: 'BIOTERA SP', hsnCode: '30049011', packSize: '1*10', mrp: 140, rate: 84, gstRate: 5 },

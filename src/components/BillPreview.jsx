@@ -151,7 +151,7 @@ const BillPreview = forwardRef(({ invoiceData, totals }, ref) => {
           <div className="border-b border-black font-bold uppercase px-2 py-1">
             TERMS & CONDITIONS
           </div>
-          <div className="border-b border-black px-2 py-1 text-[11px] leading-tight h-[100px] flex justify-between">
+          <div className="px-2 py-1 text-[11px] leading-tight h-[100px] flex justify-between">
             <div className="flex-1">
               <div className="-mx-2 px-2 pb-1 mb-1">Goods once sold will note be taken back or exchange.</div>
               <div>Bills not paid due date will attract 24% interest.</div>
