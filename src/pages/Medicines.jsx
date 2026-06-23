@@ -5,6 +5,7 @@ import {
   getBatches, addBatch, updateBatch, deleteBatch
 } from '../firebase/firestoreHelpers';
 import { db } from '../firebase/config';
+import PinProtection from '../components/PinProtection';
 
 const emptyBatch = { batchNo: '', expiry: '', mrp: '', rate: '' };
 
@@ -148,7 +149,8 @@ export default function Medicines() {
   if (loading) return <div className="p-8 text-center text-slate-500">Loading medicines...</div>;
 
   return (
-    <div className="space-y-6">
+    <PinProtection>
+      <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Medicine Master</h1>
         <div className="mt-4 sm:mt-0 space-x-3 flex">
@@ -345,5 +347,6 @@ export default function Medicines() {
         </div>
       )}
     </div>
+    </PinProtection>
   );
 }
