@@ -84,19 +84,29 @@ export const generateInvoice = async (invoiceData) => {
   try {
     const newInvoice = await runTransaction(db, async (transaction) => {
       const counterDoc = await transaction.get(counterRef);
-      let currentCount = 0;
+      
+      const now = new Date();
+      const currentMonthYear = `${now.getFullYear()}-${now.getMonth() + 1}`;
+      
+      let newCount = 1;
       
       if (!counterDoc.exists()) {
-        transaction.set(counterRef, { count: 0 });
+        // Initial setup: start at 20 for this month
+        newCount = 20;
+        transaction.set(counterRef, { count: newCount, monthYear: currentMonthYear });
       } else {
-        currentCount = counterDoc.data().count;
+        const data = counterDoc.data();
+        if (data.monthYear !== currentMonthYear) {
+          // New month started, reset to 1
+          newCount = 1;
+        } else {
+          // Same month, increment
+          newCount = data.count + 1;
+        }
+        transaction.update(counterRef, { count: newCount, monthYear: currentMonthYear });
       }
       
-      const newCount = currentCount + 1;
       const invoiceNumber = `R${String(newCount).padStart(6, '0')}`;
-      
-      // Update counter
-      transaction.update(counterRef, { count: newCount });
       
       // Add invoice
       const invoiceRef = doc(collection(db, 'invoices'));
