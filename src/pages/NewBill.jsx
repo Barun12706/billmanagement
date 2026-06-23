@@ -150,6 +150,9 @@ export default function NewBill() {
     if (field === 'qty') {
       newItems[index].amount = calculateLineItemAmount(Number(value || 0), newItems[index].rate);
     }
+    if (field === 'rate') {
+      newItems[index].amount = calculateLineItemAmount(Number(newItems[index].qty || 0), Number(value || 0));
+    }
     setLineItems([...newItems]);
   };
 
@@ -342,7 +345,16 @@ export default function NewBill() {
                     </td>
 
                     <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.mrp.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.rate.toFixed(2)}</td>
+                    <td className="px-2 py-2 bg-slate-50">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.rate}
+                        onChange={(e) => handleLineItemChange(index, 'rate', parseFloat(e.target.value) || 0)}
+                        className="block w-full rounded border border-slate-300 px-1.5 py-1 text-sm text-right focus:outline-none focus:border-blue-500 bg-white"
+                      />
+                    </td>
                     <td className="px-2 py-2 text-right font-medium text-sm text-slate-900 bg-slate-50">{item.amount.toFixed(2)}</td>
                     <td className="px-2 py-2 text-center">
                       <button type="button" onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700">
