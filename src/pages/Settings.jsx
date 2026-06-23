@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { KeyRound } from 'lucide-react';
+import PinProtection from '../components/PinProtection';
 
 export default function Settings() {
   const { updateUserPassword } = useAuth();
@@ -41,6 +42,7 @@ export default function Settings() {
   };
 
   return (
+    <PinProtection>
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
@@ -106,5 +108,6 @@ export default function Settings() {
         </div>
       </div>
     </div>
+    </PinProtection>
   );
 }
