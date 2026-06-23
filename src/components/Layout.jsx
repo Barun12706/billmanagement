@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Pill, FileText, History, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Pill, FileText, History, LogOut, Menu, X, Settings as SettingsIcon } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Layout() {
@@ -14,6 +14,7 @@ export default function Layout() {
     { name: 'Medicines', href: '/medicines', icon: Pill },
     { name: 'New Bill', href: '/new-bill', icon: FileText },
     { name: 'Bill History', href: '/history', icon: History },
+    { name: 'Settings', href: '/settings', icon: SettingsIcon },
   ];
 
   const handleLogout = async () => {

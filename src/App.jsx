@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Medicines from './pages/Medicines';
 import NewBill from './pages/NewBill';
 import BillHistory from './pages/BillHistory';
+import Settings from './pages/Settings';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
             <Route path="medicines" element={<Medicines />} />
             <Route path="new-bill" element={<NewBill />} />
             <Route path="history" element={<BillHistory />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </AuthProvider>

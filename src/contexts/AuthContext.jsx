@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 
 const AuthContext = createContext();
@@ -11,8 +11,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // If auth is not initialized (e.g. missing config), we'll simulate a logged-out state or mock it if needed.
-    // However, it's best to let it fail or handle gracefully.
     if (!auth) {
       setLoading(false);
       return;
@@ -36,10 +34,16 @@ export const AuthProvider = ({ children }) => {
     return signOut(auth);
   };
 
+  const updateUserPassword = (newPassword) => {
+    if (!auth || !auth.currentUser) throw new Error("No user logged in");
+    return updatePassword(auth.currentUser, newPassword);
+  };
+
   const value = {
     currentUser,
     login,
-    logout
+    logout,
+    updateUserPassword
   };
 
   return (
