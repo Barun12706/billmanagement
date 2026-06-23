@@ -1,0 +1,280 @@
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Printer } from 'lucide-react';
+import { getMedicines, generateInvoice } from '../firebase/firestoreHelpers';
+import { calculateTotals, calculateLineItemAmount } from '../utils/calculations';
+import { generatePDF } from '../utils/pdfGenerator';
+import BillPreview from '../components/BillPreview';
+
+export default function NewBill() {
+  const [medicines, setMedicines] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Form State
+  const [customer, setCustomer] = useState({
+    partyName: '',
+    address: '',
+    gstin: '',
+    dlNo: '',
+    phone: ''
+  });
+  
+  const [lineItems, setLineItems] = useState([
+    { productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }
+  ]);
+  
+  // Captured for PDF
+  const [finalInvoiceData, setFinalInvoiceData] = useState(null);
+  const previewRef = useRef();
+
+  useEffect(() => {
+    const fetchMeds = async () => {
+      try {
+        const data = await getMedicines();
+        setMedicines(data);
+      } catch (err) {
+        if (import.meta.env.DEV) console.error("Failed to load medicines", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMeds();
+  }, []);
+
+  const handleCustomerChange = (e) => {
+    let value = e.target.value;
+    if (e.target.name === 'phone') {
+      // Strip non-digits and limit to 10 characters
+      value = value.replace(/\D/g, '').slice(0, 10);
+    }
+    setCustomer({ ...customer, [e.target.name]: value });
+  };
+
+  const addLineItem = () => {
+    setLineItems([...lineItems, { productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }]);
+  };
+
+  const removeLineItem = (index) => {
+    if (lineItems.length > 1) {
+      setLineItems(lineItems.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleLineItemChange = (index, field, value) => {
+    const newItems = [...lineItems];
+    
+    if (field === 'productId') {
+      const selectedMed = medicines.find(m => m.id === value);
+      if (selectedMed) {
+        newItems[index] = {
+          ...newItems[index],
+          productId: selectedMed.id,
+          productName: selectedMed.productName,
+          hsnCode: selectedMed.hsnCode,
+          packSize: selectedMed.packSize,
+          mrp: selectedMed.mrp,
+          rate: selectedMed.rate,
+        };
+        // Recalculate amount if qty exists
+        newItems[index].amount = calculateLineItemAmount(Number(newItems[index].qty || 0), selectedMed.rate);
+      }
+    } else {
+      newItems[index][field] = value;
+      if (field === 'qty') {
+        newItems[index].amount = calculateLineItemAmount(Number(value || 0), newItems[index].rate);
+      }
+    }
+    
+    setLineItems(newItems);
+  };
+
+  const totals = calculateTotals(lineItems);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (lineItems.some(i => !i.productId || !i.qty)) {
+      alert("Please ensure all line items have a product and quantity.");
+      return;
+    }
+    
+    setIsGenerating(true);
+    
+    try {
+      const invoiceDataToSave = {
+        customer,
+        lineItems,
+        totals,
+        date: new Date().toISOString()
+      };
+      
+      const newInvoice = await generateInvoice(invoiceDataToSave);
+      
+      // Set for preview rendering
+      setFinalInvoiceData(newInvoice);
+      
+      // Wait for React to render the hidden preview component
+      setTimeout(async () => {
+        await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
+        
+        // Reset form
+        setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
+        setLineItems([{ productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }]);
+        setFinalInvoiceData(null);
+        setIsGenerating(false);
+        alert(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
+      }, 500); // Small delay to ensure rendering is complete
+      
+    } catch (error) {
+      if (import.meta.env.DEV) console.error("Failed to generate bill", error);
+      alert("Failed to generate bill.");
+      setIsGenerating(false);
+    }
+  };
+
+  if (loading) return <div className="p-4">Loading...</div>;
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Generate New Bill</h1>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow ring-1 ring-slate-900/5">
+        
+        {/* Customer Details */}
+        <div>
+          <h2 className="text-lg font-medium text-slate-900 mb-4 border-b pb-2">Customer Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Party Name</label>
+              <input required type="text" maxLength={100} name="partyName" value={customer.partyName} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Phone No.</label>
+              <input type="text" name="phone" value={customer.phone} onChange={handleCustomerChange} pattern="[0-9]{10}" title="Please enter exactly 10 digits" className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-700">Address</label>
+              <input required type="text" maxLength={250} name="address" value={customer.address} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">GSTIN No.</label>
+              <input type="text" maxLength={15} name="gstin" value={customer.gstin} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">DL No.</label>
+              <input type="text" maxLength={30} name="dlNo" value={customer.dlNo} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase" />
+            </div>
+          </div>
+        </div>
+
+        {/* Line Items */}
+        <div>
+          <div className="flex items-center justify-between mb-4 border-b pb-2">
+            <h2 className="text-lg font-medium text-slate-900">Line Items</h2>
+            <button type="button" onClick={addLineItem} className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500">
+              <Plus className="h-4 w-4 mr-1" /> Add Row
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-300">
+              <thead>
+                <tr>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Product</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-20">Qty</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Batch</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">Exp</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-20">MRP</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-20">Rate</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Amount</th>
+                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {lineItems.map((item, index) => (
+                  <tr key={index}>
+                    <td className="px-2 py-2">
+                      <select required value={item.productId} onChange={(e) => handleLineItemChange(index, 'productId', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500">
+                        <option value="">Select...</option>
+                        {medicines.map(m => (
+                          <option key={m.id} value={m.id}>{m.productName}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input required type="number" min="1" value={item.qty} onChange={(e) => handleLineItemChange(index, 'qty', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border text-center" />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="text" value={item.batch} onChange={(e) => handleLineItemChange(index, 'batch', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border" />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="text" placeholder="MM/YY" value={item.exp} onChange={(e) => handleLineItemChange(index, 'exp', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border" />
+                    </td>
+                    <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.mrp.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.rate.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right font-medium text-sm text-slate-900 bg-slate-50">{item.amount.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-center">
+                      <button type="button" onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Totals Box */}
+        <div className="flex justify-end pt-4 border-t">
+          <div className="w-64 space-y-2">
+            <div className="flex justify-between text-sm text-slate-600">
+              <span>Subtotal</span>
+              <span>₹{totals.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-slate-600">
+              <span>SGST (2.5%)</span>
+              <span>₹{totals.sgst.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-slate-600">
+              <span>CGST (2.5%)</span>
+              <span>₹{totals.cgst.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-lg font-bold text-slate-900 border-t pt-2 mt-2">
+              <span>Grand Total</span>
+              <span>₹{totals.grandTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="pt-4 flex justify-end">
+          <button
+            type="submit"
+            disabled={isGenerating}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {isGenerating ? (
+              'Generating...'
+            ) : (
+              <>
+                <Printer className="-ml-1 mr-2 h-5 w-5" />
+                Generate Bill & PDF
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* Hidden PDF Preview Container */}
+      {finalInvoiceData && (
+        <div className="fixed top-[200%] left-[200%] opacity-0 pointer-events-none">
+          <div id="bill-preview-container">
+            <BillPreview ref={previewRef} invoiceData={finalInvoiceData} totals={totals} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
