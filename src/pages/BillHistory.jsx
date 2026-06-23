@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Trash2, Download, Edit } from 'lucide-react';
 import { getInvoices, deleteInvoice } from '../firebase/firestoreHelpers';
 import { generatePDF } from '../utils/pdfGenerator';
 import BillPreview from '../components/BillPreview';
@@ -12,6 +13,7 @@ export default function BillHistory() {
   const [selectedInvoiceForPDF, setSelectedInvoiceForPDF] = useState(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const previewRef = useRef();
+  const navigate = useNavigate();
 
   const fetchInvoicesData = async () => {
     try {
@@ -55,6 +57,10 @@ export default function BillHistory() {
         setIsGeneratingPDF(false);
       }
     }, 500);
+  };
+
+  const handleEdit = (invoice) => {
+    navigate('/new-bill', { state: { editInvoice: invoice } });
   };
 
   const filteredInvoices = invoices.filter(inv => {
@@ -113,6 +119,13 @@ export default function BillHistory() {
                       title="Download PDF"
                     >
                       <Download className="h-4 w-4 inline" />
+                    </button>
+                    <button 
+                      onClick={() => handleEdit(inv)} 
+                      className="text-indigo-600 hover:text-indigo-900"
+                      title="Edit"
+                    >
+                      <Edit className="h-4 w-4 inline" />
                     </button>
                     <button 
                       onClick={() => handleDelete(inv.id)} 

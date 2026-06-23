@@ -158,3 +158,14 @@ export const generateInvoice = async (invoiceData, customInvoiceNumber) => {
     throw error;
   }
 };
+
+export const updateInvoice = async (id, invoiceData) => {
+  const invRef = doc(db, 'invoices', id);
+  try {
+    await updateDoc(invRef, invoiceData);
+    return { id, ...invoiceData };
+  } catch (error) {
+    if (import.meta.env.DEV) console.error("Error updating invoice:", error);
+    throw error;
+  }
+};

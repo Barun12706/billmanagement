@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Printer } from 'lucide-react';
-import { getMedicines, generateInvoice, getBatches, peekNextInvoiceNumber } from '../firebase/firestoreHelpers';
+import { getMedicines, generateInvoice, getBatches, peekNextInvoiceNumber, updateInvoice } from '../firebase/firestoreHelpers';
 import { calculateTotals, calculateLineItemAmount } from '../utils/calculations';
 import { generatePDF } from '../utils/pdfGenerator';
 import BillPreview from '../components/BillPreview';
@@ -17,13 +18,19 @@ export default function NewBill() {
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Form State
-  const [customer, setCustomer] = useState({
-    partyName: '', address: '', gstin: '', dlNo: '', phone: ''
-  });
-  const [manualInvoiceNo, setManualInvoiceNo] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const editInvoice = location.state?.editInvoice;
 
-  const [lineItems, setLineItems] = useState([emptyLineItem()]);
+  // Form State
+  const [customer, setCustomer] = useState(
+    editInvoice?.customer || { partyName: '', address: '', gstin: '', dlNo: '', phone: '' }
+  );
+  const [manualInvoiceNo, setManualInvoiceNo] = useState(editInvoice?.invoiceNumber || '');
+
+  const [lineItems, setLineItems] = useState(
+    editInvoice?.lineItems || [emptyLineItem()]
+  );
 
   // Captured for PDF
   const [finalInvoiceData, setFinalInvoiceData] = useState(null);
@@ -34,10 +41,31 @@ export default function NewBill() {
       try {
         const [data, nextInv] = await Promise.all([
           getMedicines(),
-          peekNextInvoiceNumber()
+          !editInvoice ? peekNextInvoiceNumber() : Promise.resolve(editInvoice.invoiceNumber)
         ]);
         setMedicines(data);
-        setManualInvoiceNo(nextInv);
+        if (!editInvoice) {
+          setManualInvoiceNo(nextInv);
+        }
+
+        if (editInvoice) {
+          // Preload batches for existing items
+          const itemsWithBatches = await Promise.all(
+            editInvoice.lineItems.map(async (item) => {
+              if (item.productId) {
+                try {
+                  const batches = await getBatches(item.productId);
+                  return { ...item, _batches: batches, _batchesLoaded: true };
+                } catch (e) {
+                  return { ...item, _batches: [], _batchesLoaded: true };
+                }
+              }
+              return { ...item, _batches: [], _batchesLoaded: false };
+            })
+          );
+          setLineItems(itemsWithBatches);
+        }
+
       } catch (err) {
         if (import.meta.env.DEV) console.error('Failed to load initial data', err);
       } finally {
@@ -45,7 +73,7 @@ export default function NewBill() {
       }
     };
     fetchInitialData();
-  }, []);
+  }, [editInvoice]);
 
   const handleCustomerChange = (e) => {
     let value = e.target.value;
@@ -180,24 +208,40 @@ export default function NewBill() {
         customer,
         lineItems: cleanItems,
         totals,
-        date: new Date().toISOString()
+        date: editInvoice ? editInvoice.date : new Date().toISOString()
       };
 
-      const newInvoice = await generateInvoice(invoiceDataToSave, manualInvoiceNo);
-      setFinalInvoiceData(newInvoice);
-
-      setTimeout(async () => {
-        await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
-        setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
-        setLineItems([emptyLineItem()]);
-        setFinalInvoiceData(null);
-        setIsGenerating(false);
-        alert(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
+      if (editInvoice) {
+        // Edit Mode
+        const finalData = { ...invoiceDataToSave, invoiceNumber: manualInvoiceNo };
+        await updateInvoice(editInvoice.id, finalData);
+        setFinalInvoiceData({ id: editInvoice.id, ...finalData });
         
-        // Fetch new next invoice no
-        const nextInv = await peekNextInvoiceNumber();
-        setManualInvoiceNo(nextInv);
-      }, 500);
+        setTimeout(async () => {
+          await generatePDF('bill-preview-container', manualInvoiceNo);
+          setFinalInvoiceData(null);
+          setIsGenerating(false);
+          alert(`Invoice ${manualInvoiceNo} updated successfully!`);
+          navigate('/history');
+        }, 500);
+      } else {
+        // Create Mode
+        const newInvoice = await generateInvoice(invoiceDataToSave, manualInvoiceNo);
+        setFinalInvoiceData(newInvoice);
+
+        setTimeout(async () => {
+          await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
+          setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
+          setLineItems([emptyLineItem()]);
+          setFinalInvoiceData(null);
+          setIsGenerating(false);
+          alert(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
+          
+          // Fetch new next invoice no
+          const nextInv = await peekNextInvoiceNumber();
+          setManualInvoiceNo(nextInv);
+        }, 500);
+      }
 
     } catch (error) {
       if (import.meta.env.DEV) console.error('Failed to generate bill', error);
@@ -211,7 +255,7 @@ export default function NewBill() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Generate New Bill</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{editInvoice ? 'Edit Bill' : 'Generate New Bill'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow ring-1 ring-slate-900/5">
@@ -410,16 +454,25 @@ export default function NewBill() {
         </div>
 
         {/* Actions */}
-        <div className="pt-4 flex justify-end">
+        <div className="pt-4 flex justify-end space-x-3">
+          {editInvoice && (
+            <button
+              type="button"
+              onClick={() => navigate('/history')}
+              className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+            >
+              Cancel
+            </button>
+          )}
           <button
             type="submit"
             disabled={isGenerating}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {isGenerating ? 'Generating...' : (
+            {isGenerating ? (editInvoice ? 'Updating...' : 'Generating...') : (
               <>
                 <Printer className="-ml-1 mr-2 h-5 w-5" />
-                Generate Bill & PDF
+                {editInvoice ? 'Update Bill & PDF' : 'Generate Bill & PDF'}
               </>
             )}
           </button>
