@@ -62,11 +62,11 @@ const BillPreview = forwardRef(({ invoiceData, totals }, ref) => {
           {/* Right: Invoice */}
           <div className="w-[40%] p-2 flex flex-col justify-between">
             <div className="flex justify-between"><span className="font-bold">INVOICE NO. : {invoiceNumber}</span> <span className="font-bold">DATE: {formattedDate}</span></div>
-            <div className="flex"><span className="w-24">ORDER NO. :</span> <span></span></div>
-            <div className="flex"><span className="w-24">L.R.NO. :</span> <span></span></div>
-            <div className="flex"><span className="w-24">CASES. :</span> <span></span></div>
-            <div className="flex"><span className="w-24">TRANSPORT.:</span> <span></span></div>
-            <div className="flex"><span className="w-24">DUE DATE. :</span> <span></span></div>
+            <div className="flex"><span className="w-24">ORDER NO. :</span> <span className="uppercase">{invoiceData.dispatch?.orderNo || ''}</span></div>
+            <div className="flex"><span className="w-24">L.R.NO. :</span> <span className="uppercase">{invoiceData.dispatch?.lrNo || ''}</span></div>
+            <div className="flex"><span className="w-24">CASES. :</span> <span className="uppercase">{invoiceData.dispatch?.cases || ''}</span></div>
+            <div className="flex"><span className="w-24">TRANSPORT.:</span> <span className="uppercase">{invoiceData.dispatch?.transport || ''}</span></div>
+            <div className="flex"><span className="w-24">DUE DATE. :</span> <span className="uppercase">{invoiceData.dispatch?.dueDate || ''}</span></div>
           </div>
         </div>
 

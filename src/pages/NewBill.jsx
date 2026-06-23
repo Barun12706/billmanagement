@@ -26,6 +26,9 @@ export default function NewBill() {
   const [customer, setCustomer] = useState(
     editInvoice?.customer || { partyName: '', address: '', gstin: '', dlNo: '', phone: '' }
   );
+  const [dispatch, setDispatch] = useState(
+    editInvoice?.dispatch || { orderNo: '', lrNo: '', cases: '', transport: '', dueDate: '' }
+  );
   const [manualInvoiceNo, setManualInvoiceNo] = useState(editInvoice?.invoiceNumber || '');
 
   const [lineItems, setLineItems] = useState(
@@ -81,6 +84,10 @@ export default function NewBill() {
       value = value.replace(/\D/g, '').slice(0, 10);
     }
     setCustomer({ ...customer, [e.target.name]: value });
+  };
+
+  const handleDispatchChange = (e) => {
+    setDispatch({ ...dispatch, [e.target.name]: e.target.value });
   };
 
   const addLineItem = () => {
@@ -206,6 +213,7 @@ export default function NewBill() {
 
       const invoiceDataToSave = {
         customer,
+        dispatch,
         lineItems: cleanItems,
         totals,
         date: editInvoice ? editInvoice.date : new Date().toISOString()
@@ -232,6 +240,7 @@ export default function NewBill() {
         setTimeout(async () => {
           await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
           setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
+          setDispatch({ orderNo: '', lrNo: '', cases: '', transport: '', dueDate: '' });
           setLineItems([emptyLineItem()]);
           setFinalInvoiceData(null);
           setIsGenerating(false);
@@ -297,6 +306,33 @@ export default function NewBill() {
             <div>
               <label className="block text-sm font-medium text-slate-700">DL No.</label>
               <input type="text" maxLength={30} name="dlNo" value={customer.dlNo} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase" />
+            </div>
+          </div>
+        </div>
+
+        {/* Dispatch Details */}
+        <div>
+          <h2 className="text-lg font-medium text-slate-900 mb-4 border-b pb-2">Dispatch Details (Optional)</h2>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Order No.</label>
+              <input type="text" maxLength={50} name="orderNo" value={dispatch.orderNo} onChange={handleDispatchChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">L.R. No.</label>
+              <input type="text" maxLength={50} name="lrNo" value={dispatch.lrNo} onChange={handleDispatchChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Cases</label>
+              <input type="text" maxLength={30} name="cases" value={dispatch.cases} onChange={handleDispatchChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Transport</label>
+              <input type="text" maxLength={100} name="transport" value={dispatch.transport} onChange={handleDispatchChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Due Date</label>
+              <input type="text" maxLength={30} name="dueDate" value={dispatch.dueDate} onChange={handleDispatchChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
             </div>
           </div>
         </div>
