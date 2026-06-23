@@ -1,28 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Printer } from 'lucide-react';
-import { getMedicines, generateInvoice } from '../firebase/firestoreHelpers';
+import { getMedicines, generateInvoice, getBatches } from '../firebase/firestoreHelpers';
 import { calculateTotals, calculateLineItemAmount } from '../utils/calculations';
 import { generatePDF } from '../utils/pdfGenerator';
 import BillPreview from '../components/BillPreview';
+
+const emptyLineItem = () => ({
+  productId: '', productName: '', qty: '', packSize: '', hsnCode: '',
+  batch: '', exp: '', mrp: 0, rate: 0, amount: 0,
+  _batches: [],       // available batches for this row
+  _batchesLoaded: false,
+});
 
 export default function NewBill() {
   const [medicines, setMedicines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  
+
   // Form State
   const [customer, setCustomer] = useState({
-    partyName: '',
-    address: '',
-    gstin: '',
-    dlNo: '',
-    phone: ''
+    partyName: '', address: '', gstin: '', dlNo: '', phone: ''
   });
-  
-  const [lineItems, setLineItems] = useState([
-    { productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }
-  ]);
-  
+
+  const [lineItems, setLineItems] = useState([emptyLineItem()]);
+
   // Captured for PDF
   const [finalInvoiceData, setFinalInvoiceData] = useState(null);
   const previewRef = useRef();
@@ -33,7 +34,7 @@ export default function NewBill() {
         const data = await getMedicines();
         setMedicines(data);
       } catch (err) {
-        if (import.meta.env.DEV) console.error("Failed to load medicines", err);
+        if (import.meta.env.DEV) console.error('Failed to load medicines', err);
       } finally {
         setLoading(false);
       }
@@ -44,14 +45,13 @@ export default function NewBill() {
   const handleCustomerChange = (e) => {
     let value = e.target.value;
     if (e.target.name === 'phone') {
-      // Strip non-digits and limit to 10 characters
       value = value.replace(/\D/g, '').slice(0, 10);
     }
     setCustomer({ ...customer, [e.target.name]: value });
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }]);
+    setLineItems([...lineItems, emptyLineItem()]);
   };
 
   const removeLineItem = (index) => {
@@ -60,9 +60,9 @@ export default function NewBill() {
     }
   };
 
-  const handleLineItemChange = (index, field, value) => {
+  const handleLineItemChange = async (index, field, value) => {
     const newItems = [...lineItems];
-    
+
     if (field === 'productId') {
       const selectedMed = medicines.find(m => m.id === value);
       if (selectedMed) {
@@ -74,18 +74,68 @@ export default function NewBill() {
           packSize: selectedMed.packSize,
           mrp: selectedMed.mrp,
           rate: selectedMed.rate,
+          batch: '',
+          exp: '',
+          _batches: [],
+          _batchesLoaded: false,
         };
-        // Recalculate amount if qty exists
         newItems[index].amount = calculateLineItemAmount(Number(newItems[index].qty || 0), selectedMed.rate);
+        setLineItems([...newItems]);
+
+        // Fetch batches for this medicine
+        try {
+          const batches = await getBatches(selectedMed.id);
+          setLineItems(prev => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], _batches: batches, _batchesLoaded: true };
+            return updated;
+          });
+        } catch (err) {
+          if (import.meta.env.DEV) console.error('Failed to load batches', err);
+          setLineItems(prev => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], _batchesLoaded: true };
+            return updated;
+          });
+        }
+      } else {
+        // Cleared selection
+        newItems[index] = { ...emptyLineItem() };
+        setLineItems([...newItems]);
       }
-    } else {
-      newItems[index][field] = value;
-      if (field === 'qty') {
-        newItems[index].amount = calculateLineItemAmount(Number(value || 0), newItems[index].rate);
-      }
+      return;
     }
-    
-    setLineItems(newItems);
+
+    if (field === 'batchId') {
+      // User selected a batch from dropdown
+      const selectedBatch = newItems[index]._batches.find(b => b.id === value);
+      if (selectedBatch) {
+        newItems[index] = {
+          ...newItems[index],
+          batch: selectedBatch.batchNo,
+          exp: selectedBatch.expiry || '',
+          mrp: selectedBatch.mrp || newItems[index].mrp,
+          rate: selectedBatch.rate || newItems[index].rate,
+        };
+        newItems[index].amount = calculateLineItemAmount(Number(newItems[index].qty || 0), newItems[index].rate);
+      } else {
+        // "Select batch..." cleared
+        newItems[index] = {
+          ...newItems[index],
+          batch: '',
+          exp: '',
+        };
+      }
+      setLineItems([...newItems]);
+      return;
+    }
+
+    // Generic field update
+    newItems[index][field] = value;
+    if (field === 'qty') {
+      newItems[index].amount = calculateLineItemAmount(Number(value || 0), newItems[index].rate);
+    }
+    setLineItems([...newItems]);
   };
 
   const totals = calculateTotals(lineItems);
@@ -93,40 +143,38 @@ export default function NewBill() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (lineItems.some(i => !i.productId || !i.qty)) {
-      alert("Please ensure all line items have a product and quantity.");
+      alert('Please ensure all line items have a product and quantity.');
       return;
     }
-    
+
     setIsGenerating(true);
-    
+
     try {
+      // Strip internal _batches fields before saving
+      const cleanItems = lineItems.map(({ _batches, _batchesLoaded, ...rest }) => rest);
+
       const invoiceDataToSave = {
         customer,
-        lineItems,
+        lineItems: cleanItems,
         totals,
         date: new Date().toISOString()
       };
-      
+
       const newInvoice = await generateInvoice(invoiceDataToSave);
-      
-      // Set for preview rendering
       setFinalInvoiceData(newInvoice);
-      
-      // Wait for React to render the hidden preview component
+
       setTimeout(async () => {
         await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
-        
-        // Reset form
         setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
-        setLineItems([{ productId: '', productName: '', qty: '', packSize: '', hsnCode: '', batch: '', exp: '', mrp: 0, rate: 0, amount: 0 }]);
+        setLineItems([emptyLineItem()]);
         setFinalInvoiceData(null);
         setIsGenerating(false);
         alert(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
-      }, 500); // Small delay to ensure rendering is complete
-      
+      }, 500);
+
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Failed to generate bill", error);
-      alert("Failed to generate bill.");
+      if (import.meta.env.DEV) console.error('Failed to generate bill', error);
+      alert('Failed to generate bill.');
       setIsGenerating(false);
     }
   };
@@ -140,7 +188,7 @@ export default function NewBill() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow ring-1 ring-slate-900/5">
-        
+
         {/* Customer Details */}
         <div>
           <h2 className="text-lg font-medium text-slate-900 mb-4 border-b pb-2">Customer Details</h2>
@@ -176,14 +224,14 @@ export default function NewBill() {
               <Plus className="h-4 w-4 mr-1" /> Add Row
             </button>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-300">
               <thead>
                 <tr>
                   <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Product</th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-20">Qty</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Batch</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-36">Batch</th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">Exp</th>
                   <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-20">MRP</th>
                   <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-20">Rate</th>
@@ -194,23 +242,83 @@ export default function NewBill() {
               <tbody className="divide-y divide-slate-200">
                 {lineItems.map((item, index) => (
                   <tr key={index}>
+                    {/* Product */}
                     <td className="px-2 py-2">
-                      <select required value={item.productId} onChange={(e) => handleLineItemChange(index, 'productId', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500">
+                      <select
+                        required
+                        value={item.productId}
+                        onChange={(e) => handleLineItemChange(index, 'productId', e.target.value)}
+                        className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500"
+                      >
                         <option value="">Select...</option>
                         {medicines.map(m => (
                           <option key={m.id} value={m.id}>{m.productName}</option>
                         ))}
                       </select>
                     </td>
+
+                    {/* Qty */}
                     <td className="px-2 py-2">
-                      <input required type="number" min="1" value={item.qty} onChange={(e) => handleLineItemChange(index, 'qty', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border text-center" />
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        value={item.qty}
+                        onChange={(e) => handleLineItemChange(index, 'qty', e.target.value)}
+                        className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border text-center"
+                      />
                     </td>
+
+                    {/* Batch Dropdown */}
                     <td className="px-2 py-2">
-                      <input type="text" value={item.batch} onChange={(e) => handleLineItemChange(index, 'batch', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border" />
+                      {item.productId ? (
+                        item._batchesLoaded ? (
+                          item._batches.length > 0 ? (
+                            <select
+                              value={item._batches.find(b => b.batchNo === item.batch)?.id || ''}
+                              onChange={(e) => handleLineItemChange(index, 'batchId', e.target.value)}
+                              className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500"
+                            >
+                              <option value="">Select batch...</option>
+                              {item._batches.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batchNo} (Exp: {b.expiry})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder="No batches"
+                              value={item.batch}
+                              onChange={(e) => handleLineItemChange(index, 'batch', e.target.value)}
+                              className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border"
+                            />
+                          )
+                        ) : (
+                          <div className="text-xs text-slate-400 px-2 py-2 animate-pulse">Loading...</div>
+                        )
+                      ) : (
+                        <input
+                          type="text"
+                          disabled
+                          placeholder="—"
+                          className="block w-full rounded-md border-slate-200 bg-slate-50 sm:text-sm p-1.5 border text-slate-400 cursor-not-allowed"
+                        />
+                      )}
                     </td>
+
+                    {/* Exp — read-only if filled from batch, editable otherwise */}
                     <td className="px-2 py-2">
-                      <input type="text" placeholder="MM/YY" value={item.exp} onChange={(e) => handleLineItemChange(index, 'exp', e.target.value)} className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border" />
+                      <input
+                        type="text"
+                        placeholder="MM/YY"
+                        value={item.exp}
+                        onChange={(e) => handleLineItemChange(index, 'exp', e.target.value)}
+                        className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border"
+                      />
                     </td>
+
                     <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.mrp.toFixed(2)}</td>
                     <td className="px-2 py-2 text-right text-sm text-slate-600 bg-slate-50">{item.rate.toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-medium text-sm text-slate-900 bg-slate-50">{item.amount.toFixed(2)}</td>
@@ -230,20 +338,16 @@ export default function NewBill() {
         <div className="flex justify-end pt-4 border-t">
           <div className="w-64 space-y-2">
             <div className="flex justify-between text-sm text-slate-600">
-              <span>Subtotal</span>
-              <span>₹{totals.subtotal.toFixed(2)}</span>
+              <span>Subtotal</span><span>₹{totals.subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-slate-600">
-              <span>SGST (2.5%)</span>
-              <span>₹{totals.sgst.toFixed(2)}</span>
+              <span>SGST (2.5%)</span><span>₹{totals.sgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-slate-600">
-              <span>CGST (2.5%)</span>
-              <span>₹{totals.cgst.toFixed(2)}</span>
+              <span>CGST (2.5%)</span><span>₹{totals.cgst.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-lg font-bold text-slate-900 border-t pt-2 mt-2">
-              <span>Grand Total</span>
-              <span>₹{totals.grandTotal.toFixed(2)}</span>
+              <span>Grand Total</span><span>₹{totals.grandTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -255,9 +359,7 @@ export default function NewBill() {
             disabled={isGenerating}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {isGenerating ? (
-              'Generating...'
-            ) : (
+            {isGenerating ? 'Generating...' : (
               <>
                 <Printer className="-ml-1 mr-2 h-5 w-5" />
                 Generate Bill & PDF
