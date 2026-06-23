@@ -24,7 +24,7 @@ export default function NewBill() {
 
   // Form State
   const [customer, setCustomer] = useState(
-    editInvoice?.customer || { partyName: '', address: '', gstin: '', dlNo: '', phone: '' }
+    editInvoice?.customer || { partyName: '', address: '', city: '', state: '', gstin: '', dlNo: '', phone: '' }
   );
   const [dispatch, setDispatch] = useState(
     editInvoice?.dispatch || { orderNo: '', lrNo: '', cases: '', transport: '', dueDate: '' }
@@ -239,7 +239,7 @@ export default function NewBill() {
 
         setTimeout(async () => {
           await generatePDF('bill-preview-container', newInvoice.invoiceNumber);
-          setCustomer({ partyName: '', address: '', gstin: '', dlNo: '', phone: '' });
+          setCustomer({ partyName: '', address: '', city: '', state: '', gstin: '', dlNo: '', phone: '' });
           setDispatch({ orderNo: '', lrNo: '', cases: '', transport: '', dueDate: '' });
           setLineItems([emptyLineItem()]);
           setFinalInvoiceData(null);
@@ -298,6 +298,14 @@ export default function NewBill() {
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700">Address</label>
               <input required type="text" maxLength={250} name="address" value={customer.address} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">City</label>
+              <input required type="text" maxLength={50} name="city" value={customer.city} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">State</label>
+              <input required type="text" maxLength={50} name="state" value={customer.state} onChange={handleCustomerChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">GSTIN No.</label>

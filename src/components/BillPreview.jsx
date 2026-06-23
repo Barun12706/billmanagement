@@ -52,7 +52,11 @@ const BillPreview = forwardRef(({ invoiceData, totals }, ref) => {
           {/* Left: Customer */}
           <div className="w-[60%] border-r border-black p-2 flex flex-col">
             <div className="font-bold uppercase text-[12px] mb-1">M/S {customer.partyName}</div>
-            <div className="flex-1 uppercase">{customer.address}</div>
+            <div className="flex-1 uppercase">
+              {customer.address}
+              {customer.city ? `, ${customer.city}` : ''}
+              {customer.state ? `, ${customer.state}` : ''}
+            </div>
             <div className="mt-auto">
               <div className="flex"><span className="w-20">GSTIN NO.:</span> <span className="uppercase">{customer.gstin}</span></div>
               <div className="flex"><span className="w-20">DL.NO.:</span> <span className="uppercase">{customer.dlNo}</span></div>

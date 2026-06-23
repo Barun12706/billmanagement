@@ -83,6 +83,26 @@ export default function Dashboard() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
+  // --- Revenue by Location ---
+  const locationRevenueMap = {};
+  invoices.forEach(inv => {
+    let loc = "Unknown Location";
+    if (inv.customer?.city && inv.customer?.state) {
+      loc = `${inv.customer.city.toUpperCase()}, ${inv.customer.state.toUpperCase()}`;
+    } else if (inv.customer?.city) {
+      loc = inv.customer.city.toUpperCase();
+    } else if (inv.customer?.state) {
+      loc = inv.customer.state.toUpperCase();
+    }
+    
+    if (!locationRevenueMap[loc]) locationRevenueMap[loc] = 0;
+    locationRevenueMap[loc] += (inv.totals?.grandTotal || 0);
+  });
+
+  const locationData = Object.entries(locationRevenueMap)
+    .map(([name, value]) => ({ name, Revenue: value }))
+    .sort((a, b) => b.Revenue - a.Revenue);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Revenue Analytics</h1>
@@ -152,7 +172,7 @@ export default function Dashboard() {
         </div>
         
         {/* Bills Trend Line Chart */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+        <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-medium text-slate-900 mb-4">Bills Trend</h2>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -164,6 +184,26 @@ export default function Dashboard() {
                 <Line type="monotone" dataKey="Bills" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Revenue by Location Bar Chart */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-slate-900 mb-4">Revenue by Location</h2>
+          <div className="h-72">
+            {locationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={locationData} layout="vertical" margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" axisLine={false} tickLine={false} tickFormatter={(value) => `₹${value}`} />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} />
+                  <RechartsTooltip cursor={{fill: 'transparent'}} formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} />
+                  <Bar dataKey="Revenue" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">No data available</div>
+            )}
           </div>
         </div>
       </div>
