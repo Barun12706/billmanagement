@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Printer } from 'lucide-react';
-import { getMedicines, generateInvoice, getBatches } from '../firebase/firestoreHelpers';
+import { getMedicines, generateInvoice, getBatches, peekNextInvoiceNumber } from '../firebase/firestoreHelpers';
 import { calculateTotals, calculateLineItemAmount } from '../utils/calculations';
 import { generatePDF } from '../utils/pdfGenerator';
 import BillPreview from '../components/BillPreview';
@@ -21,6 +21,7 @@ export default function NewBill() {
   const [customer, setCustomer] = useState({
     partyName: '', address: '', gstin: '', dlNo: '', phone: ''
   });
+  const [manualInvoiceNo, setManualInvoiceNo] = useState('');
 
   const [lineItems, setLineItems] = useState([emptyLineItem()]);
 
@@ -29,17 +30,21 @@ export default function NewBill() {
   const previewRef = useRef();
 
   useEffect(() => {
-    const fetchMeds = async () => {
+    const fetchInitialData = async () => {
       try {
-        const data = await getMedicines();
+        const [data, nextInv] = await Promise.all([
+          getMedicines(),
+          peekNextInvoiceNumber()
+        ]);
         setMedicines(data);
+        setManualInvoiceNo(nextInv);
       } catch (err) {
-        if (import.meta.env.DEV) console.error('Failed to load medicines', err);
+        if (import.meta.env.DEV) console.error('Failed to load initial data', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchMeds();
+    fetchInitialData();
   }, []);
 
   const handleCustomerChange = (e) => {
@@ -178,7 +183,7 @@ export default function NewBill() {
         date: new Date().toISOString()
       };
 
-      const newInvoice = await generateInvoice(invoiceDataToSave);
+      const newInvoice = await generateInvoice(invoiceDataToSave, manualInvoiceNo);
       setFinalInvoiceData(newInvoice);
 
       setTimeout(async () => {
@@ -188,6 +193,10 @@ export default function NewBill() {
         setFinalInvoiceData(null);
         setIsGenerating(false);
         alert(`Invoice ${newInvoice.invoiceNumber} generated successfully!`);
+        
+        // Fetch new next invoice no
+        const nextInv = await peekNextInvoiceNumber();
+        setManualInvoiceNo(nextInv);
       }, 500);
 
     } catch (error) {
@@ -206,6 +215,20 @@ export default function NewBill() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow ring-1 ring-slate-900/5">
+
+        {/* Invoice Config */}
+        <div className="flex justify-end border-b pb-4 mb-4">
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-slate-700">Invoice No:</label>
+            <input 
+              type="text" 
+              required
+              value={manualInvoiceNo} 
+              onChange={(e) => setManualInvoiceNo(e.target.value)} 
+              className="w-32 rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-1.5 border uppercase font-mono"
+            />
+          </div>
+        </div>
 
         {/* Customer Details */}
         <div>

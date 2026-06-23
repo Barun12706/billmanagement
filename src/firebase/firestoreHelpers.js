@@ -77,8 +77,29 @@ export const deleteInvoice = async (id) => {
   return await deleteDoc(invRef);
 };
 
+// Peek next invoice number without incrementing
+export const peekNextInvoiceNumber = async () => {
+  const counterRef = doc(db, 'counters', 'invoiceCounter');
+  const counterDoc = await getDoc(counterRef);
+  const now = new Date();
+  const currentMonthYear = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  
+  let newCount = 1;
+  if (!counterDoc.exists()) {
+    newCount = 20;
+  } else {
+    const data = counterDoc.data();
+    if (data.monthYear !== currentMonthYear) {
+      newCount = 1;
+    } else {
+      newCount = data.count + 1;
+    }
+  }
+  return `R${String(newCount).padStart(6, '0')}`;
+};
+
 // Transaction to generate auto-incrementing invoice number and save invoice
-export const generateInvoice = async (invoiceData) => {
+export const generateInvoice = async (invoiceData, customInvoiceNumber) => {
   const counterRef = doc(db, 'counters', 'invoiceCounter');
   
   try {
@@ -93,7 +114,6 @@ export const generateInvoice = async (invoiceData) => {
       if (!counterDoc.exists()) {
         // Initial setup: start at 20 for this month
         newCount = 20;
-        transaction.set(counterRef, { count: newCount, monthYear: currentMonthYear });
       } else {
         const data = counterDoc.data();
         if (data.monthYear !== currentMonthYear) {
@@ -103,16 +123,28 @@ export const generateInvoice = async (invoiceData) => {
           // Same month, increment
           newCount = data.count + 1;
         }
-        transaction.update(counterRef, { count: newCount, monthYear: currentMonthYear });
       }
       
-      const invoiceNumber = `R${String(newCount).padStart(6, '0')}`;
+      let finalInvoiceNumber = customInvoiceNumber || `R${String(newCount).padStart(6, '0')}`;
+      
+      // If a custom number was provided, update the counter if it contains a higher number
+      if (customInvoiceNumber) {
+        const match = customInvoiceNumber.match(/\d+$/);
+        if (match) {
+          const customNum = parseInt(match[0], 10);
+          if (customNum >= newCount) {
+            newCount = customNum;
+          }
+        }
+      }
+      
+      transaction.set(counterRef, { count: newCount, monthYear: currentMonthYear });
       
       // Add invoice
       const invoiceRef = doc(collection(db, 'invoices'));
       const finalInvoiceData = {
         ...invoiceData,
-        invoiceNumber,
+        invoiceNumber: finalInvoiceNumber,
         createdAt: new Date().toISOString()
       };
       transaction.set(invoiceRef, finalInvoiceData);
