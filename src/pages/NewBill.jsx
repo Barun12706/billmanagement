@@ -87,7 +87,22 @@ export default function NewBill() {
           const batches = await getBatches(selectedMed.id);
           setLineItems(prev => {
             const updated = [...prev];
-            updated[index] = { ...updated[index], _batches: batches, _batchesLoaded: true };
+            // Auto-select if only one batch
+            if (batches.length === 1) {
+              const b = batches[0];
+              updated[index] = {
+                ...updated[index],
+                _batches: batches,
+                _batchesLoaded: true,
+                batch: b.batchNo,
+                exp: b.expiry || '',
+                mrp: b.mrp || updated[index].mrp,
+                rate: b.rate || updated[index].rate,
+              };
+              updated[index].amount = calculateLineItemAmount(Number(updated[index].qty || 0), updated[index].rate);
+            } else {
+              updated[index] = { ...updated[index], _batches: batches, _batchesLoaded: true };
+            }
             return updated;
           });
         } catch (err) {
@@ -274,18 +289,25 @@ export default function NewBill() {
                       {item.productId ? (
                         item._batchesLoaded ? (
                           item._batches.length > 0 ? (
-                            <select
-                              value={item._batches.find(b => b.batchNo === item.batch)?.id || ''}
-                              onChange={(e) => handleLineItemChange(index, 'batchId', e.target.value)}
-                              className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500"
-                            >
-                              <option value="">Select batch...</option>
-                              {item._batches.map(b => (
-                                <option key={b.id} value={b.id}>
-                                  {b.batchNo} (Exp: {b.expiry})
-                                </option>
-                              ))}
-                            </select>
+                            item._batches.length === 1 ? (
+                              // Single batch — show as read-only pill
+                              <div className="px-2 py-1.5 text-sm text-slate-700 bg-slate-100 rounded-md border border-slate-200 font-medium">
+                                {item.batch}
+                              </div>
+                            ) : (
+                              <select
+                                value={item._batches.find(b => b.batchNo === item.batch)?.id || ''}
+                                onChange={(e) => handleLineItemChange(index, 'batchId', e.target.value)}
+                                className="block w-full rounded-md border-slate-300 sm:text-sm p-1.5 border focus:border-blue-500 focus:ring-blue-500"
+                              >
+                                <option value="">Select batch...</option>
+                                {item._batches.map(b => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.batchNo}
+                                  </option>
+                                ))}
+                              </select>
+                            )
                           ) : (
                             <input
                               type="text"
